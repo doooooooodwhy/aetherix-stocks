@@ -1,8 +1,8 @@
 {
   "stock_name": "Aetherix",
   "base_value": 50.0,
-  "current_price": 1056.8,
-  "last_updated": "2026-03-01T20:26:03.417354",
+  "current_price": 1063.14,
+  "last_updated": "2026-03-01T21:08:33.210726",
   "history": [
     {
       "date": "2026-03-01T03:49:10.109081",
@@ -96,6 +96,14 @@
       "old_price": 161.22,
       "new_price": 1056.8,
       "date": "2026-03-01T20:26:03.417345"
+    },
+    {
+      "type": "green",
+      "amount": 6.0,
+      "impact": 0.6000000000000001,
+      "old_price": 1056.8,
+      "new_price": 1063.14,
+      "date": "2026-03-01T21:08:33.210715"
     }
   ]
 }
