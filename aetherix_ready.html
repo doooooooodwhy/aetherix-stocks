@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aetherix (AETX) - Paper Trading</title>
+    <title>Aetherix (AETX) - Live Trading</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -99,47 +99,101 @@
         .event-indicator { width: 12px; height: 12px; border-radius: 50%; margin-right: 15px; }
         .event-green { background: #00ff88; box-shadow: 0 0 10px #00ff88; }
         .event-red { background: #ff4757; box-shadow: 0 0 10px #ff4757; }
-        .loading {
+        .controls {
             text-align: center;
-            padding: 20px;
-            color: #00d4ff;
+            margin: 20px 0;
         }
-        .error {
+        .refresh-btn, .clear-btn {
+            background: linear-gradient(45deg, #00ff88, #00d4ff);
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            color: #000;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            margin: 5px;
+            transition: transform 0.2s;
+        }
+        .refresh-btn:hover, .clear-btn:hover {
+            transform: scale(1.05);
+        }
+        .clear-btn {
+            background: linear-gradient(45deg, #ff4757, #ff6348);
+            color: #fff;
+        }
+        .status {
             text-align: center;
-            padding: 20px;
-            color: #ff4757;
+            padding: 10px;
+            border-radius: 10px;
+            margin: 10px 0;
+            font-size: 0.9rem;
         }
+        .status.loading { background: rgba(0, 212, 255, 0.2); color: #00d4ff; }
+        .status.success { background: rgba(0, 255, 136, 0.2); color: #00ff88; }
+        .status.error { background: rgba(255, 71, 87, 0.2); color: #ff4757; }
         .last-update {
             text-align: center;
             color: #666;
             font-size: 0.85rem;
             margin-top: 10px;
         }
-        .refresh-btn {
-            background: linear-gradient(45deg, #00ff88, #00d4ff);
-            border: none;
+        .config-box {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .config-box input {
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid rgba(255,255,255,0.2);
+            background: rgba(0,0,0,0.5);
+            color: #fff;
+            width: 300px;
+            margin: 5px;
+        }
+        .config-box button {
             padding: 10px 20px;
-            border-radius: 20px;
+            background: #00d4ff;
+            border: none;
+            border-radius: 5px;
             color: #000;
             font-weight: 600;
             cursor: pointer;
-            margin-top: 10px;
         }
     </style>
 <base target="_blank">
 </head>
 <body>
     <div class="container">
+        <!-- Configuration -->
+        <div class="config-box">
+            <div style="margin-bottom: 10px; color: #888;">GitHub Configuration</div>
+            <input type="text" id="githubUser" placeholder="GitHub Username (e.g., john)" value="">
+            <input type="text" id="githubRepo" placeholder="Repo Name (e.g., aetherix-stock)" value="">
+            <button onclick="saveConfig()">Save & Load</button>
+            <div style="margin-top: 10px; font-size: 0.8rem; color: #666;">
+                Data URL: <span id="dataUrl">Not configured</span>
+            </div>
+        </div>
+
         <div class="header">
             <div class="stock-symbol">AETX</div>
             <div style="color: #888; margin-top: 5px;">Aetherix Corporation</div>
             <div class="price-display">
-                <div class="current-price" id="currentPrice">Loading...</div>
-                <div class="price-change neutral" id="priceChange">--</div>
+                <div class="current-price" id="currentPrice">$50.00</div>
+                <div class="price-change neutral" id="priceChange">0.00%</div>
                 <div class="base-info">Base Value: <span>50 Aetherix</span></div>
             </div>
-            <div class="last-update" id="lastUpdate">Fetching data from GitHub...</div>
-            <button class="refresh-btn" onclick="fetchData()">🔄 Refresh</button>
+            <div class="last-update" id="lastUpdate">Click Save & Load to connect</div>
+
+            <div class="controls">
+                <button class="refresh-btn" onclick="forceRefresh()">🔄 Force Refresh</button>
+                <button class="clear-btn" onclick="clearCache()">🗑️ Clear Cache</button>
+            </div>
+            <div id="statusBox" class="status" style="display: none;"></div>
         </div>
 
         <div class="chart-container">
@@ -165,123 +219,183 @@
             </div>
             <div class="stat-card">
                 <div class="stat-label">Current Price</div>
-                <div class="stat-value" id="statCurrent">--</div>
+                <div class="stat-value" id="statCurrent">$50.00</div>
             </div>
             <div class="stat-card">
                 <div class="stat-label">Total Change</div>
-                <div class="stat-value" id="statChange" style="color: #888;">--</div>
+                <div class="stat-value" id="statChange" style="color: #888;">$0.00</div>
             </div>
             <div class="stat-card">
                 <div class="stat-label">Event Count</div>
-                <div class="stat-value" id="eventCount">--</div>
+                <div class="stat-value" id="eventCount">0</div>
             </div>
         </div>
 
         <div class="events-container">
             <div style="font-size: 1.5rem; margin-bottom: 20px;">📊 Event History</div>
             <div class="event-list" id="eventList">
-                <div class="loading">Loading events...</div>
+                <div style="text-align: center; color: #666; padding: 40px;">
+                    Configure GitHub above to load data
+                </div>
             </div>
         </div>
     </div>
 
     <script>
-        // GitHub configuration - CHANGE THESE
-        const GITHUB_USER = "YOUR_GITHUB_USERNAME";
-        const GITHUB_REPO = "YOUR_REPO_NAME";
-        const DATA_FILE = "aetherix_data.json";
-
-        // Raw GitHub URL (acts as free API)
-        const DATA_URL = `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/main/${DATA_FILE}`;
-
+        // Configuration
+        let GITHUB_USER = localStorage.getItem('aetherix_user') || '';
+        let GITHUB_REPO = localStorage.getItem('aetherix_repo') || '';
         let stockData = null;
+        let refreshInterval = null;
 
-        // Fetch data from GitHub
-        async function fetchData() {
-            const priceEl = document.getElementById('currentPrice');
-            const updateEl = document.getElementById('lastUpdate');
+        // Load saved config
+        document.getElementById('githubUser').value = GITHUB_USER;
+        document.getElementById('githubRepo').value = GITHUB_REPO;
 
-            try {
-                updateEl.textContent = "Fetching from GitHub...";
+        function saveConfig() {
+            GITHUB_USER = document.getElementById('githubUser').value.trim();
+            GITHUB_REPO = document.getElementById('githubRepo').value.trim();
 
-                // Add timestamp to prevent caching
-                const response = await fetch(DATA_URL + "?t=" + Date.now(), {
-                    cache: 'no-cache'
-                });
-
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-
-                stockData = await response.json();
-                console.log("Data loaded:", stockData);
-
-                updateDisplay();
-                drawChart();
-
-                updateEl.textContent = `Last updated: ${new Date().toLocaleString()}`;
-                updateEl.style.color = "#00ff88";
-
-            } catch (error) {
-                console.error("Error fetching data:", error);
-                priceEl.textContent = "Error";
-                updateEl.textContent = `Failed to load: ${error.message}`;
-                updateEl.style.color = "#ff4757";
-
-                document.getElementById('eventList').innerHTML = `
-                    <div class="error">
-                        ❌ Failed to load data from GitHub<br>
-                        Make sure:<br>
-                        1. GITHUB_USER is set to your username<br>
-                        2. GITHUB_REPO is set to your repo<br>
-                        3. aetherix_data.json exists in the repo<br>
-                        4. Repo is public<br>
-                        <br>
-                        Error: ${error.message}
-                    </div>
-                `;
+            if (!GITHUB_USER || !GITHUB_REPO) {
+                showStatus('Please enter both username and repo name', 'error');
+                return;
             }
+
+            localStorage.setItem('aetherix_user', GITHUB_USER);
+            localStorage.setItem('aetherix_repo', GITHUB_REPO);
+
+            document.getElementById('dataUrl').textContent = 
+                `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/main/aetherix_data.json`;
+
+            showStatus('Configuration saved! Loading data...', 'loading');
+            forceRefresh();
+
+            // Start auto-refresh
+            if (refreshInterval) clearInterval(refreshInterval);
+            refreshInterval = setInterval(forceRefresh, 5000); // Every 5 seconds
+        }
+
+        function showStatus(msg, type) {
+            const box = document.getElementById('statusBox');
+            box.textContent = msg;
+            box.className = 'status ' + type;
+            box.style.display = 'block';
+
+            if (type === 'success') {
+                setTimeout(() => box.style.display = 'none', 3000);
+            }
+        }
+
+        async function forceRefresh() {
+            if (!GITHUB_USER || !GITHUB_REPO) {
+                showStatus('Configure GitHub first!', 'error');
+                return;
+            }
+
+            // Use multiple cache-busting techniques
+            const timestamp = Date.now();
+            const random = Math.random();
+
+            // Try multiple URL formats to bypass cache
+            const urls = [
+                `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/main/aetherix_data.json?nocache=${timestamp}`,
+                `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/main/aetherix_data.json?t=${timestamp}`,
+                `https://rawgit.com/${GITHUB_USER}/${GITHUB_REPO}/main/aetherix_data.json?${timestamp}`,
+                `https://cdn.jsdelivr.net/gh/${GITHUB_USER}/${GITHUB_REPO}@main/aetherix_data.json?${timestamp}`
+            ];
+
+            let success = false;
+            let lastError = '';
+
+            for (const url of urls) {
+                try {
+                    console.log('Trying:', url);
+                    const response = await fetch(url, {
+                        method: 'GET',
+                        cache: 'no-store',
+                        headers: {
+                            'Cache-Control': 'no-cache, no-store, must-revalidate',
+                            'Pragma': 'no-cache',
+                            'Expires': '0'
+                        }
+                    });
+
+                    if (response.ok) {
+                        const text = await response.text();
+                        console.log('Raw response:', text.substring(0, 100));
+
+                        try {
+                            stockData = JSON.parse(text);
+                            console.log('Parsed data:', stockData);
+
+                            if (stockData && typeof stockData.current_price === 'number') {
+                                updateDisplay();
+                                drawChart();
+                                showStatus(`✅ Updated! Price: $${stockData.current_price.toFixed(2)}`, 'success');
+                                success = true;
+                                break;
+                            }
+                        } catch (e) {
+                            console.error('Parse error:', e);
+                            lastError = 'Invalid JSON';
+                        }
+                    }
+                } catch (e) {
+                    console.error('Fetch error:', e);
+                    lastError = e.message;
+                }
+            }
+
+            if (!success) {
+                showStatus(`❌ Failed to load: ${lastError}. Check console (F12) for details.`, 'error');
+            }
+        }
+
+        function clearCache() {
+            localStorage.removeItem('aetherix_user');
+            localStorage.removeItem('aetherix_repo');
+            location.reload();
         }
 
         function updateDisplay() {
             if (!stockData) return;
 
             const current = stockData.current_price;
-            const base = stockData.base_value;
+            const base = stockData.base_value || 50;
             const change = current - base;
             const changePercent = (change / base) * 100;
 
-            // Update price
             document.getElementById('currentPrice').textContent = '$' + current.toFixed(2);
 
             const changeEl = document.getElementById('priceChange');
             changeEl.textContent = (change >= 0 ? '+' : '') + changePercent.toFixed(2) + '%';
             changeEl.className = 'price-change ' + (change > 0 ? 'positive' : change < 0 ? 'negative' : 'neutral');
 
-            // Update stats
             document.getElementById('statCurrent').textContent = '$' + current.toFixed(2);
             document.getElementById('statCurrent').style.color = change >= 0 ? '#00ff88' : '#ff4757';
 
             document.getElementById('statChange').textContent = (change >= 0 ? '+' : '') + '$' + Math.abs(change).toFixed(2);
             document.getElementById('statChange').style.color = change >= 0 ? '#00ff88' : '#ff4757';
 
-            document.getElementById('eventCount').textContent = stockData.events ? stockData.events.length : 0;
+            const events = stockData.events || [];
+            document.getElementById('eventCount').textContent = events.length;
 
-            // Update events
-            updateEvents();
+            document.getElementById('lastUpdate').textContent = 'Last updated: ' + new Date().toLocaleTimeString();
+
+            updateEvents(events);
         }
 
-        function updateEvents() {
+        function updateEvents(events) {
             const list = document.getElementById('eventList');
 
-            if (!stockData.events || stockData.events.length === 0) {
+            if (events.length === 0) {
                 list.innerHTML = '<div style="text-align: center; color: #666; padding: 40px;">No events yet. Use Discord bot to trade!</div>';
                 return;
             }
 
             list.innerHTML = '';
 
-            [...stockData.events].reverse().forEach(event => {
+            [...events].reverse().forEach(event => {
                 const date = new Date(event.date);
                 const item = document.createElement('div');
                 item.className = 'event-item';
@@ -297,7 +411,7 @@
                             ${arrow} ${action} ${event.amount > 0 ? '(' + event.amount + ')' : ''}
                         </div>
                         <div style="color: #888; font-size: 0.85rem;">
-                            ${date.toLocaleDateString()} at ${date.toLocaleTimeString()}
+                            ${date.toLocaleDateString()} ${date.toLocaleTimeString()}
                         </div>
                     </div>
                     <div style="text-align: right;">
@@ -322,16 +436,15 @@
 
             ctx.clearRect(0, 0, width, height);
 
-            if (!stockData || !stockData.events) return;
+            if (!stockData) return;
+
+            const BASE_VALUE = 50;
+            const events = stockData.events || [];
 
             const padding = { top: 40, right: 60, bottom: 40, left: 60 };
             const chartWidth = width - padding.left - padding.right;
             const chartHeight = height - padding.top - padding.bottom;
 
-            const BASE_VALUE = 50;
-            const events = stockData.events;
-
-            // Calculate price range
             const allPrices = [BASE_VALUE, stockData.current_price];
             events.forEach(e => {
                 allPrices.push(e.old_price, e.new_price);
@@ -341,7 +454,7 @@
             const maxPrice = Math.max(...allPrices) * 1.05;
             const priceRange = maxPrice - minPrice;
 
-            // Draw grid
+            // Grid
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
             ctx.lineWidth = 1;
             for (let i = 0; i <= 5; i++) {
@@ -358,7 +471,7 @@
                 ctx.fillText('$' + price.toFixed(2), padding.left - 10, y + 3);
             }
 
-            // Draw base line (dashed at $50)
+            // Base line
             const baseY = padding.top + ((maxPrice - BASE_VALUE) / priceRange) * chartHeight;
             ctx.beginPath();
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
@@ -375,7 +488,6 @@
             ctx.fillText('BASE', width - padding.right + 5, baseY + 3);
 
             if (events.length === 0) {
-                // Just draw flat line at base
                 ctx.beginPath();
                 ctx.strokeStyle = '#00d4ff';
                 ctx.lineWidth = 3;
@@ -421,7 +533,7 @@
                 ctx.shadowBlur = 0;
             }
 
-            // Draw event points
+            // Points
             points.forEach((point, i) => {
                 if (i === 0) return;
 
@@ -446,11 +558,15 @@
             ctx.stroke();
         }
 
-        // Auto-refresh every 10 seconds
-        setInterval(fetchData, 10000);
+        window.addEventListener('resize', drawChart);
 
-        // Initial load
-        fetchData();
+        // Auto-load if config exists
+        if (GITHUB_USER && GITHUB_REPO) {
+            document.getElementById('dataUrl').textContent = 
+                `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/main/aetherix_data.json`;
+            forceRefresh();
+            refreshInterval = setInterval(forceRefresh, 5000);
+        }
     </script>
 </body>
 </html>
